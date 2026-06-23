@@ -1,0 +1,30 @@
+name: Test basic usage (both fonts disabled)
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Install fontconfig and prepare dummy download artifacts
+        run: |
+          # Install fontconfig so fc-cache is available for install.sh
+          sudo apt-get install -y fontconfig 2>/dev/null || true
+          # Pre-create dummy zip and Open_Data dir so clear.sh doesn't fail
+          touch cns11643.zip
+          mkdir -p Open_Data/Fonts
+      - name: Run action with both fonts disabled
+        id: action
+        uses: .
+        with:
+          kai: 'false'
+          sung: 'false'
+          download-flag: '-nv --timeout=3 --tries=1'
+      - name: Assert fonts directory was created
+        run: |
+          echo "Checking ~/.fonts directory exists..."
+          if [ ! -d "$HOME/.fonts" ]; then
+            echo "FAIL: ~/.fonts directory was not created"
+            exit 1
+          fi
+          echo "PASS: ~/.fonts directory exists"
