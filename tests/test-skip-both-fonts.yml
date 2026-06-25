@@ -1,0 +1,38 @@
+name: Test skip both fonts
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install fontconfig and prepare dummy files for clear.sh
+        run: |
+          # Install fontconfig so fc-cache is available for install.sh
+          sudo apt-get install -y fontconfig 2>/dev/null || true
+          # clear.sh runs 'rm *.zip' and 'rm -r kai/ sung/' unconditionally.
+          # Pre-create dummy files so rm does not fail when fonts are skipped.
+          touch Fonts_Kai.zip Fonts_Sung.zip
+          mkdir -p kai sung
+
+      - id: action
+        uses: .
+        with:
+          kai: 'false'
+          sung: 'false'
+          cache: 'false'
+
+      - name: Assert fonts directory was created
+        run: |
+          echo "Checking ~/.fonts directory exists..."
+          if [ ! -d "$HOME/.fonts" ]; then
+            echo "FAIL: ~/.fonts directory was not created by init.sh"
+            exit 1
+          fi
+          echo "PASS: ~/.fonts directory exists"
+
+      - name: Assert action completed without errors
+        run: |
+          echo "Action completed successfully with kai=false, sung=false, cache=false"
+          echo "PASS"

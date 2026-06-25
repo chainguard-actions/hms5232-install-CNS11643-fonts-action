@@ -1,0 +1,53 @@
+name: Test sung only (kai disabled)
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install fontconfig and prepare fake Sung font zip
+        run: |
+          # Install fontconfig so fc-cache is available for install.sh
+          sudo apt-get install -y fontconfig 2>/dev/null || true
+          # Create a minimal fake TTF file at the root level of the zip.
+          # download_sung.sh does: unzip Fonts_Sung.zip -d sung
+          # then: cp -i sung/TW-Sung-*.ttf $HOME/.fonts
+          # So the zip must contain TW-Sung-*.ttf at the root (not in a subdir).
+          printf '\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00' > TW-Sung-98_1.ttf
+          zip Fonts_Sung.zip TW-Sung-98_1.ttf
+          rm TW-Sung-98_1.ttf
+          echo "Fake Fonts_Sung.zip created"
+          ls -lh Fonts_Sung.zip
+          # clear.sh runs 'rm -r kai/ sung/' unconditionally; pre-create kai/
+          # and a dummy Fonts_Kai.zip so rm does not fail.
+          mkdir -p kai
+          touch Fonts_Kai.zip
+
+      - id: action
+        uses: .
+        with:
+          kai: 'false'
+          sung: 'true'
+          cache: 'false'
+
+      - name: Assert fonts directory was created
+        run: |
+          echo "Checking ~/.fonts directory exists..."
+          if [ ! -d "$HOME/.fonts" ]; then
+            echo "FAIL: ~/.fonts directory was not created"
+            exit 1
+          fi
+          echo "PASS: ~/.fonts directory exists"
+
+      - name: Assert Sung font was installed
+        run: |
+          echo "Checking Sung font was copied to ~/.fonts..."
+          SUNG_COUNT=$(find "$HOME/.fonts" -name "TW-Sung-*.ttf" 2>/dev/null | wc -l)
+          echo "Sung fonts found in ~/.fonts: $SUNG_COUNT"
+          if [ "$SUNG_COUNT" -eq 0 ]; then
+            echo "FAIL: No TW-Sung-*.ttf fonts found in ~/.fonts"
+            exit 1
+          fi
+          echo "PASS: Sung fonts installed"

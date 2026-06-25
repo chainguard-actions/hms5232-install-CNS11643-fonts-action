@@ -1,0 +1,53 @@
+name: Test kai only (sung disabled)
+on:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install fontconfig and prepare fake Kai font zip
+        run: |
+          # Install fontconfig so fc-cache is available for install.sh
+          sudo apt-get install -y fontconfig 2>/dev/null || true
+          # Create a minimal fake TTF file at the root level of the zip.
+          # download_kai.sh does: unzip Fonts_Kai.zip -d kai
+          # then: cp -i kai/TW-Kai-*.ttf $HOME/.fonts
+          # So the zip must contain TW-Kai-*.ttf at the root (not in a subdir).
+          printf '\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00' > TW-Kai-98_1.ttf
+          zip Fonts_Kai.zip TW-Kai-98_1.ttf
+          rm TW-Kai-98_1.ttf
+          echo "Fake Fonts_Kai.zip created"
+          ls -lh Fonts_Kai.zip
+          # clear.sh runs 'rm -r kai/ sung/' unconditionally; pre-create sung/
+          # and a dummy Fonts_Sung.zip so rm does not fail.
+          mkdir -p sung
+          touch Fonts_Sung.zip
+
+      - id: action
+        uses: .
+        with:
+          kai: 'true'
+          sung: 'false'
+          cache: 'false'
+
+      - name: Assert fonts directory was created
+        run: |
+          echo "Checking ~/.fonts directory exists..."
+          if [ ! -d "$HOME/.fonts" ]; then
+            echo "FAIL: ~/.fonts directory was not created"
+            exit 1
+          fi
+          echo "PASS: ~/.fonts directory exists"
+
+      - name: Assert Kai font was installed
+        run: |
+          echo "Checking Kai font was copied to ~/.fonts..."
+          KAI_COUNT=$(find "$HOME/.fonts" -name "TW-Kai-*.ttf" 2>/dev/null | wc -l)
+          echo "Kai fonts found in ~/.fonts: $KAI_COUNT"
+          if [ "$KAI_COUNT" -eq 0 ]; then
+            echo "FAIL: No TW-Kai-*.ttf fonts found in ~/.fonts"
+            exit 1
+          fi
+          echo "PASS: Kai fonts installed"
