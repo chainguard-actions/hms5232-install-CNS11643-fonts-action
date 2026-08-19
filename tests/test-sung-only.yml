@@ -1,4 +1,4 @@
-name: Test sung font only
+name: Test sung-only installation
 on:
   workflow_dispatch:
 jobs:
@@ -6,47 +6,46 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - name: Install fontconfig and prepare mock font files
+      - name: Install fontconfig
+        run: sudo apt-get install -y fontconfig
+      - name: Set up fake font data to avoid real download
         run: |
-          # Install fontconfig so fc-cache is available for install.sh
-          sudo apt-get install -y fontconfig 2>/dev/null || true
-          # Pre-create dummy zip so clear.sh can remove it
-          touch cns11643.zip
-          # Create Open_Data/Fonts with mock TTF files so copy.sh can copy them
-          mkdir -p Open_Data/Fonts
-          touch Open_Data/Fonts/TW-Kai-98_1.ttf
-          touch Open_Data/Fonts/TW-Kai-Ext-B-98_1.ttf
-          touch Open_Data/Fonts/TW-Sung-98_1.ttf
-          touch Open_Data/Fonts/TW-Sung-Ext-B-98_1.ttf
-          echo "Mock font files created:"
-          ls -la Open_Data/Fonts/
-      - name: Run action with sung only
-        id: action
+          # Create fake cns11643.zip so clear.sh can remove it
+          touch "$GITHUB_WORKSPACE/cns11643.zip"
+          # Create Open_Data/Fonts with fake font files so copy.sh finds them
+          mkdir -p "$GITHUB_WORKSPACE/Open_Data/Fonts"
+          cp "$GITHUB_WORKSPACE/tests/fixtures/fonts/TW-Kai-98_1.ttf" "$GITHUB_WORKSPACE/Open_Data/Fonts/"
+          cp "$GITHUB_WORKSPACE/tests/fixtures/fonts/TW-Sung-98_1.ttf" "$GITHUB_WORKSPACE/Open_Data/Fonts/"
+          echo "Setup complete"
+          ls -la "$GITHUB_WORKSPACE/Open_Data/Fonts/"
+      - id: action
         uses: .
         with:
           kai: 'false'
           sung: 'true'
-          download-flag: '-nv --timeout=3 --tries=1'
-      - name: Assert sung fonts were installed
+          download-flag: '-nv'
+      - name: Assert ~/.fonts directory exists
         run: |
-          echo "Checking ~/.fonts directory for sung fonts..."
           if [ ! -d "$HOME/.fonts" ]; then
-            echo "FAIL: ~/.fonts directory was not created"
+            echo "FAIL: ~/.fonts directory does not exist"
             exit 1
           fi
-          sung_count=$(ls "$HOME/.fonts"/TW-Sung-*.ttf 2>/dev/null | wc -l)
-          echo "Sung fonts found: $sung_count"
-          if [ "$sung_count" -eq 0 ]; then
-            echo "FAIL: No sung fonts found in ~/.fonts"
-            exit 1
-          fi
-          echo "PASS: Sung fonts installed successfully"
-      - name: Assert kai fonts were NOT installed
+          echo "PASS: ~/.fonts directory exists"
+      - name: Assert kai fonts NOT installed
         run: |
-          kai_count=$(ls "$HOME/.fonts"/TW-Kai-*.ttf 2>/dev/null | wc -l)
-          echo "Kai fonts found: $kai_count"
-          if [ "$kai_count" -ne 0 ]; then
-            echo "FAIL: Kai fonts should not have been installed"
+          KAI_COUNT=$(ls "$HOME/.fonts"/TW-Kai-*.ttf 2>/dev/null | wc -l)
+          echo "Kai font count: $KAI_COUNT"
+          if [ "$KAI_COUNT" -ne 0 ]; then
+            echo "FAIL: TW-Kai-*.ttf fonts found in ~/.fonts but kai=false"
             exit 1
           fi
-          echo "PASS: Kai fonts correctly not installed"
+          echo "PASS: no kai fonts installed as expected"
+      - name: Assert sung fonts installed
+        run: |
+          SUNG_COUNT=$(ls "$HOME/.fonts"/TW-Sung-*.ttf 2>/dev/null | wc -l)
+          echo "Sung font count: $SUNG_COUNT"
+          if [ "$SUNG_COUNT" -eq 0 ]; then
+            echo "FAIL: no TW-Sung-*.ttf fonts found in ~/.fonts"
+            exit 1
+          fi
+          echo "PASS: $SUNG_COUNT sung font(s) installed"

@@ -1,4 +1,4 @@
-name: Test basic usage (both fonts disabled)
+name: Test basic usage (both kai and sung fonts)
 on:
   workflow_dispatch:
 jobs:
@@ -6,25 +6,60 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - name: Install fontconfig and prepare dummy download artifacts
+      - name: Install fontconfig
+        run: sudo apt-get install -y fontconfig
+      - name: Set up fake font data to avoid real download
         run: |
-          # Install fontconfig so fc-cache is available for install.sh
-          sudo apt-get install -y fontconfig 2>/dev/null || true
-          # Pre-create dummy zip and Open_Data dir so clear.sh doesn't fail
-          touch cns11643.zip
-          mkdir -p Open_Data/Fonts
-      - name: Run action with both fonts disabled
-        id: action
+          # Create fake cns11643.zip so clear.sh can remove it
+          touch "$GITHUB_WORKSPACE/cns11643.zip"
+          # Create Open_Data/Fonts with fake font files so copy.sh finds them
+          mkdir -p "$GITHUB_WORKSPACE/Open_Data/Fonts"
+          cp "$GITHUB_WORKSPACE/tests/fixtures/fonts/TW-Kai-98_1.ttf" "$GITHUB_WORKSPACE/Open_Data/Fonts/"
+          cp "$GITHUB_WORKSPACE/tests/fixtures/fonts/TW-Sung-98_1.ttf" "$GITHUB_WORKSPACE/Open_Data/Fonts/"
+          echo "Setup complete"
+          ls -la "$GITHUB_WORKSPACE/Open_Data/Fonts/"
+      - id: action
         uses: .
         with:
-          kai: 'false'
-          sung: 'false'
-          download-flag: '-nv --timeout=3 --tries=1'
-      - name: Assert fonts directory was created
+          kai: 'true'
+          sung: 'true'
+          download-flag: '-nv'
+      - name: Assert ~/.fonts directory exists
         run: |
-          echo "Checking ~/.fonts directory exists..."
           if [ ! -d "$HOME/.fonts" ]; then
-            echo "FAIL: ~/.fonts directory was not created"
+            echo "FAIL: ~/.fonts directory does not exist"
             exit 1
           fi
           echo "PASS: ~/.fonts directory exists"
+      - name: Assert kai fonts installed
+        run: |
+          KAI_COUNT=$(ls "$HOME/.fonts"/TW-Kai-*.ttf 2>/dev/null | wc -l)
+          echo "Kai font count: $KAI_COUNT"
+          if [ "$KAI_COUNT" -eq 0 ]; then
+            echo "FAIL: no TW-Kai-*.ttf fonts found in ~/.fonts"
+            exit 1
+          fi
+          echo "PASS: $KAI_COUNT kai font(s) installed"
+      - name: Assert sung fonts installed
+        run: |
+          SUNG_COUNT=$(ls "$HOME/.fonts"/TW-Sung-*.ttf 2>/dev/null | wc -l)
+          echo "Sung font count: $SUNG_COUNT"
+          if [ "$SUNG_COUNT" -eq 0 ]; then
+            echo "FAIL: no TW-Sung-*.ttf fonts found in ~/.fonts"
+            exit 1
+          fi
+          echo "PASS: $SUNG_COUNT sung font(s) installed"
+      - name: Assert cleanup was done (zip removed)
+        run: |
+          if [ -f "cns11643.zip" ]; then
+            echo "FAIL: cns11643.zip was not cleaned up"
+            exit 1
+          fi
+          echo "PASS: cns11643.zip was cleaned up"
+      - name: Assert cleanup was done (Open_Data removed)
+        run: |
+          if [ -d "Open_Data/" ]; then
+            echo "FAIL: Open_Data/ directory was not cleaned up"
+            exit 1
+          fi
+          echo "PASS: Open_Data/ directory was cleaned up"

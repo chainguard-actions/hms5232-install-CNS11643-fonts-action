@@ -37,36 +37,25 @@ runs:
         curl "${args[@]}" \
           -d "{\"repository\":\"${GITHUB_REPOSITORY}\",\"action\":\"${GITHUB_ACTION_REPOSITORY}\"}" \
           "https://actions.enforce.dev/actions/v1/record" >/dev/null 2>&1 || true
-    - env:
-        ACTION_PATH: ${{ github.action_path }}
-      run: "$ACTION_PATH/init.sh"
+    - run: "$GITHUB_ACTION_PATH/init.sh"
       shell: bash
     - env:
-        ACTION_PATH: ${{ github.action_path }}
-        INPUT_DOWNLOAD_FLAG: ${{ inputs.download-flag }}
+        DOWNLOAD_FLAG: ${{ inputs.download-flag }}
       run: |
         echo "::group::download and unzip"
-        "$ACTION_PATH/download.sh" -f "$INPUT_DOWNLOAD_FLAG" || echo "Download completed"
+        "$GITHUB_ACTION_PATH/download.sh" -f "$DOWNLOAD_FLAG" || echo "Download completed"
         echo "::endgroup::"
       shell: bash
-    - env:
-        ACTION_PATH: ${{ github.action_path }}
-      run: "$ACTION_PATH/copy.sh kai"
+    - run: "$GITHUB_ACTION_PATH/copy.sh kai"
       shell: bash
       if: ${{ inputs.kai == 'true' }}
-    - env:
-        ACTION_PATH: ${{ github.action_path }}
-      run: "$ACTION_PATH/copy.sh sung"
+    - run: "$GITHUB_ACTION_PATH/copy.sh sung"
       shell: bash
       if: ${{ inputs.sung == 'true' }}
-    - env:
-        ACTION_PATH: ${{ github.action_path }}
-      run: |
+    - run: |
         echo "::group::update fonts"
-        "$ACTION_PATH/install.sh"
+        "$GITHUB_ACTION_PATH/install.sh"
         echo "::endgroup::"
       shell: bash
-    - env:
-        ACTION_PATH: ${{ github.action_path }}
-      run: "$ACTION_PATH/clear.sh"
+    - run: "$GITHUB_ACTION_PATH/clear.sh"
       shell: bash
