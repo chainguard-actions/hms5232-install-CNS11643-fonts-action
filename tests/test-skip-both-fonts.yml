@@ -7,16 +7,15 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Install fontconfig and prepare dummy files for clear.sh
+      - name: Pre-create dummy files so clear.sh does not fail on rm
         run: |
-          # Install fontconfig so fc-cache is available for install.sh
-          sudo apt-get install -y fontconfig 2>/dev/null || true
-          # clear.sh runs 'rm *.zip' and 'rm -r kai/ sung/' unconditionally.
-          # Pre-create dummy files so rm does not fail when fonts are skipped.
+          # clear.sh always runs "rm *.zip" and "rm -r kai/ sung/"
+          # When no fonts are downloaded, these fail. Pre-create them so the action succeeds.
           touch Fonts_Kai.zip Fonts_Sung.zip
           mkdir -p kai sung
 
       - id: action
+        name: Run action with both fonts disabled
         uses: .
         with:
           kai: 'false'
@@ -25,14 +24,42 @@ jobs:
 
       - name: Assert fonts directory was created
         run: |
-          echo "Checking ~/.fonts directory exists..."
+          echo "Checking ~/.fonts directory exists"
           if [ ! -d "$HOME/.fonts" ]; then
-            echo "FAIL: ~/.fonts directory was not created by init.sh"
+            echo "FAIL: ~/.fonts directory was not created"
             exit 1
           fi
           echo "PASS: ~/.fonts directory exists"
 
-      - name: Assert action completed without errors
+      - name: Assert no Kai fonts installed
         run: |
-          echo "Action completed successfully with kai=false, sung=false, cache=false"
-          echo "PASS"
+          echo "Checking no Kai fonts were installed"
+          KAI_COUNT=$(find "$HOME/.fonts" -name "TW-Kai-*.ttf" 2>/dev/null | wc -l)
+          echo "Kai font count: $KAI_COUNT"
+          if [ "$KAI_COUNT" -ne 0 ]; then
+            echo "FAIL: Kai fonts were installed but should not have been"
+            exit 1
+          fi
+          echo "PASS: No Kai fonts installed as expected"
+
+      - name: Assert no Sung fonts installed
+        run: |
+          echo "Checking no Sung fonts were installed"
+          SUNG_COUNT=$(find "$HOME/.fonts" -name "TW-Sung-*.ttf" 2>/dev/null | wc -l)
+          echo "Sung font count: $SUNG_COUNT"
+          if [ "$SUNG_COUNT" -ne 0 ]; then
+            echo "FAIL: Sung fonts were installed but should not have been"
+            exit 1
+          fi
+          echo "PASS: No Sung fonts installed as expected"
+
+      - name: Assert no zip files remain
+        run: |
+          echo "Checking no zip files remain in workspace"
+          ZIP_COUNT=$(find . -maxdepth 1 -name "*.zip" 2>/dev/null | wc -l)
+          echo "Zip file count: $ZIP_COUNT"
+          if [ "$ZIP_COUNT" -ne 0 ]; then
+            echo "FAIL: zip files remain after action ran"
+            exit 1
+          fi
+          echo "PASS: No zip files remain"

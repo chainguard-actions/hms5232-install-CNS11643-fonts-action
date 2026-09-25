@@ -1,4 +1,4 @@
-name: Test install Sung fonts only
+name: Test install both fonts (default)
 on:
   workflow_dispatch:
 jobs:
@@ -52,17 +52,11 @@ jobs:
           chmod +x "$MOCK"
           echo "$HOME/bin" >> "$GITHUB_PATH"
 
-      - name: Pre-create kai directory so clear.sh does not fail on rm -r
-        run: |
-          # clear.sh always runs "rm -r kai/ sung/" regardless of which fonts were installed.
-          # Pre-create the kai/ dir so rm does not fail when kai=false.
-          mkdir -p kai
-
       - id: action
-        name: Run action with only Sung fonts enabled
+        name: Run action with default settings (both fonts, no cache)
         uses: .
         with:
-          kai: 'false'
+          kai: 'true'
           sung: 'true'
           cache: 'false'
           download-flag: '-nv'
@@ -76,16 +70,16 @@ jobs:
           fi
           echo "PASS: ~/.fonts directory exists"
 
-      - name: Assert Kai fonts were NOT installed
+      - name: Assert Kai fonts were installed
         run: |
-          echo "Checking Kai fonts were NOT installed"
+          echo "Checking Kai fonts were installed"
           KAI_COUNT=$(find "$HOME/.fonts" -name "TW-Kai-*.ttf" 2>/dev/null | wc -l)
           echo "Kai font count: $KAI_COUNT"
-          if [ "$KAI_COUNT" -ne 0 ]; then
-            echo "FAIL: Kai fonts were installed but should not have been (kai=false)"
+          if [ "$KAI_COUNT" -eq 0 ]; then
+            echo "FAIL: No Kai fonts found in ~/.fonts"
             exit 1
           fi
-          echo "PASS: No Kai fonts installed as expected"
+          echo "PASS: $KAI_COUNT Kai font(s) installed"
 
       - name: Assert Sung fonts were installed
         run: |

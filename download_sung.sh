@@ -12,7 +12,12 @@ done
 if [ -f "Fonts_Sung.zip" ]; then
   echo "Use exists Fonts_Sung.zip"
 else
-  wget -O Fonts_Sung.zip "${flags}" https://www.cns11643.gov.tw/opendata/Fonts_Sung.zip
+  wget_flags=()
+  if [ -n "$flags" ]; then
+    while IFS= read -r -d '' t; do wget_flags+=("$t"); done \
+      < <(printf '%s' "$flags" | xargs printf '%s\0')
+  fi
+  wget -O Fonts_Sung.zip "${wget_flags[@]}" https://www.cns11643.gov.tw/opendata/Fonts_Sung.zip
 fi
 
 # let's hash it~

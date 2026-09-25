@@ -1,4 +1,4 @@
-name: Test kai only (sung disabled)
+name: Test install Kai fonts only
 on:
   workflow_dispatch:
 jobs:
@@ -7,47 +7,104 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Install fontconfig and prepare fake Kai font zip
+      - name: Install zip utility and set up mock wget
         run: |
-          # Install fontconfig so fc-cache is available for install.sh
-          sudo apt-get install -y fontconfig 2>/dev/null || true
-          # Create a minimal fake TTF file at the root level of the zip.
-          # download_kai.sh does: unzip Fonts_Kai.zip -d kai
-          # then: cp -i kai/TW-Kai-*.ttf $HOME/.fonts
-          # So the zip must contain TW-Kai-*.ttf at the root (not in a subdir).
-          printf '\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00' > TW-Kai-98_1.ttf
-          zip Fonts_Kai.zip TW-Kai-98_1.ttf
-          rm TW-Kai-98_1.ttf
-          echo "Fake Fonts_Kai.zip created"
-          ls -lh Fonts_Kai.zip
-          # clear.sh runs 'rm -r kai/ sung/' unconditionally; pre-create sung/
-          # and a dummy Fonts_Sung.zip so rm does not fail.
+          sudo apt-get install -y zip unzip 2>/dev/null || true
+          mkdir -p "$HOME/bin"
+          MOCK="$HOME/bin/wget"
+          printf '%s\n' '#!/bin/sh' > "$MOCK"
+          printf '%s\n' 'out=""' >> "$MOCK"
+          printf '%s\n' 'prev=""' >> "$MOCK"
+          printf '%s\n' 'url=""' >> "$MOCK"
+          printf '%s\n' 'for arg in "$@"; do' >> "$MOCK"
+          printf '%s\n' '  case "$prev" in' >> "$MOCK"
+          printf '%s\n' '    -O|--output-document) out="$arg" ;;' >> "$MOCK"
+          printf '%s\n' '  esac' >> "$MOCK"
+          printf '%s\n' '  case "$arg" in' >> "$MOCK"
+          printf '%s\n' '    http://*|https://*) url="$arg" ;;' >> "$MOCK"
+          printf '%s\n' '  esac' >> "$MOCK"
+          printf '%s\n' '  prev="$arg"' >> "$MOCK"
+          printf '%s\n' 'done' >> "$MOCK"
+          printf '%s\n' '# Resolve output path to absolute' >> "$MOCK"
+          printf '%s\n' 'case "$out" in' >> "$MOCK"
+          printf '%s\n' '  /*) absout="$out" ;;' >> "$MOCK"
+          printf '%s\n' '  *) absout="$(pwd)/$out" ;;' >> "$MOCK"
+          printf '%s\n' 'esac' >> "$MOCK"
+          printf '%s\n' 'case "$url" in' >> "$MOCK"
+          printf '%s\n' '  *Fonts_Kai*)' >> "$MOCK"
+          printf '%s\n' '    tmpdir=$(mktemp -d)' >> "$MOCK"
+          printf '%s\n' '    printf "FAKE_TTF_DATA_KAI" > "$tmpdir/TW-Kai-98_1.ttf"' >> "$MOCK"
+          printf '%s\n' '    (cd "$tmpdir" && zip -q "$absout" TW-Kai-98_1.ttf)' >> "$MOCK"
+          printf '%s\n' '    rm -rf "$tmpdir"' >> "$MOCK"
+          printf '%s\n' '    exit 0' >> "$MOCK"
+          printf '%s\n' '    ;;' >> "$MOCK"
+          printf '%s\n' '  *Fonts_Sung*)' >> "$MOCK"
+          printf '%s\n' '    tmpdir=$(mktemp -d)' >> "$MOCK"
+          printf '%s\n' '    printf "FAKE_TTF_DATA_SUNG" > "$tmpdir/TW-Sung-98_1.ttf"' >> "$MOCK"
+          printf '%s\n' '    (cd "$tmpdir" && zip -q "$absout" TW-Sung-98_1.ttf)' >> "$MOCK"
+          printf '%s\n' '    rm -rf "$tmpdir"' >> "$MOCK"
+          printf '%s\n' '    exit 0' >> "$MOCK"
+          printf '%s\n' '    ;;' >> "$MOCK"
+          printf '%s\n' '  *)' >> "$MOCK"
+          printf '%s\n' '    exec /usr/bin/wget "$@"' >> "$MOCK"
+          printf '%s\n' '    ;;' >> "$MOCK"
+          printf '%s\n' 'esac' >> "$MOCK"
+          chmod +x "$MOCK"
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+
+      - name: Pre-create sung directory so clear.sh does not fail on rm -r
+        run: |
+          # clear.sh always runs "rm -r kai/ sung/" regardless of which fonts were installed.
+          # Pre-create the sung/ dir so rm does not fail when sung=false.
           mkdir -p sung
-          touch Fonts_Sung.zip
 
       - id: action
+        name: Run action with only Kai fonts enabled
         uses: .
         with:
           kai: 'true'
           sung: 'false'
           cache: 'false'
+          download-flag: '-nv'
 
       - name: Assert fonts directory was created
         run: |
-          echo "Checking ~/.fonts directory exists..."
+          echo "Checking ~/.fonts directory exists"
           if [ ! -d "$HOME/.fonts" ]; then
             echo "FAIL: ~/.fonts directory was not created"
             exit 1
           fi
           echo "PASS: ~/.fonts directory exists"
 
-      - name: Assert Kai font was installed
+      - name: Assert Kai fonts were installed
         run: |
-          echo "Checking Kai font was copied to ~/.fonts..."
+          echo "Checking Kai fonts were installed"
           KAI_COUNT=$(find "$HOME/.fonts" -name "TW-Kai-*.ttf" 2>/dev/null | wc -l)
-          echo "Kai fonts found in ~/.fonts: $KAI_COUNT"
+          echo "Kai font count: $KAI_COUNT"
           if [ "$KAI_COUNT" -eq 0 ]; then
-            echo "FAIL: No TW-Kai-*.ttf fonts found in ~/.fonts"
+            echo "FAIL: No Kai fonts found in ~/.fonts"
             exit 1
           fi
-          echo "PASS: Kai fonts installed"
+          echo "PASS: $KAI_COUNT Kai font(s) installed"
+
+      - name: Assert Sung fonts were NOT installed
+        run: |
+          echo "Checking Sung fonts were NOT installed"
+          SUNG_COUNT=$(find "$HOME/.fonts" -name "TW-Sung-*.ttf" 2>/dev/null | wc -l)
+          echo "Sung font count: $SUNG_COUNT"
+          if [ "$SUNG_COUNT" -ne 0 ]; then
+            echo "FAIL: Sung fonts were installed but should not have been (sung=false)"
+            exit 1
+          fi
+          echo "PASS: No Sung fonts installed as expected"
+
+      - name: Assert no zip files remain after cleanup
+        run: |
+          echo "Checking no zip files remain in workspace"
+          ZIP_COUNT=$(find . -maxdepth 1 -name "*.zip" 2>/dev/null | wc -l)
+          echo "Zip file count: $ZIP_COUNT"
+          if [ "$ZIP_COUNT" -ne 0 ]; then
+            echo "FAIL: zip files remain after action ran (clear.sh should have removed them)"
+            exit 1
+          fi
+          echo "PASS: No zip files remain"
