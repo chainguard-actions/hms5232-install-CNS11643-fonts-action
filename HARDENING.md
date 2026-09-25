@@ -10,47 +10,48 @@
 
 **Harden Agent Version:** `2`
 
-Action **hms5232--install-CNS11643-fonts-action/v1.2.0** was hardened automatically. 4 finding(s) were identified and resolved across 1 iteration(s).
+Action **hms5232--install-CNS11643-fonts-action/v1.2.0** was hardened automatically. 4 finding(s) were identified and resolved across 2 iteration(s).
 
 ## Findings Fixed
 
 ### script-injection (severity: high)
 
-Multiple `run:` blocks in action.yml directly interpolate `${{ }}` expressions inside shell command strings (sub-rule a). This applies to every step that uses `${{ github.action_path }}` or `${{ inputs.download-flag }}` directly in the run: script. Specifically:
-- Line 26: `run: ${{ github.action_path }}/init.sh` — expression interpolated directly in run:
-- Line 37: `${{ github.action_path }}/download_kai.sh -f "${{ inputs.download-flag }}"` — both github.action_path and the attacker-controlled inputs.download-flag are interpolated directly
-- Line 53: `${{ github.action_path }}/download_sung.sh -f "${{ inputs.download-flag }}"` — same issue
-- Line 65: `${{ github.action_path }}/install.sh` — expression in run:
-- Line 70: `run: ${{ github.action_path }}/clear.sh` — expression in run:
+Multiple `run:` blocks in action.yml directly interpolate GitHub Actions expressions inside shell command strings (rule a). This means the YAML template engine substitutes the value before the shell ever sees it, enabling script injection.
 
-Additionally (sub-rule b), the `inputs.download-flag` value is passed as a shell argument and then expanded **unquoted** as `${flags}` in the wget command inside download_kai.sh and download_sung.sh (e.g. `wget -O Fonts_Kai.zip ${flags} https://...`). An attacker-controlled input with shell metacharacters (`;`, `|`, `$(...)`, etc.) can cause command injection.
+1. Line 25: `run: ${{ github.action_path }}/init.sh` — `${{ github.action_path }}` interpolated directly in a run: command.
+2. Line 36: `${{ github.action_path }}/download_kai.sh -f "${{ inputs.download-flag }}"` — both `github.action_path` and the attacker-controlled `inputs.download-flag` are interpolated directly. A caller can supply a value like `; malicious-command #` to inject arbitrary shell commands.
+3. Line 51: `${{ github.action_path }}/download_sung.sh -f "${{ inputs.download-flag }}"` — same issue for the Sung fonts step.
+4. Line 59: `${{ github.action_path }}/install.sh` — `github.action_path` interpolated directly.
+5. Line 62: `run: ${{ github.action_path }}/clear.sh` — `github.action_path` interpolated directly.
+
+Fix: Move expressions into `env:` variables and reference those shell variables (properly quoted) in the `run:` script instead of using `${{ }}` directly inside the shell command string.
 
 Locations:
 
-- `action.yml:26`
-- `action.yml:37`
-- `action.yml:38`
-- `action.yml:53`
-- `action.yml:54`
-- `action.yml:65`
-- `action.yml:70`
-- `download_kai.sh:14`
-- `download_sung.sh:14`
+- `action.yml:25`
+- `action.yml:36`
+- `action.yml:51`
+- `action.yml:59`
+- `action.yml:62`
 
 ### unpinned-uses (severity: high)
 
-All four `uses:` references in action.yml use mutable version tags (`@v5`) instead of immutable full 40-character SHA commit digests. This exposes the action to supply-chain attacks if the referenced action's tag is moved or compromised. Failing references:
-- `actions/cache/restore@v5` (Restore cached Kai fonts step)
-- `actions/cache/save@v5` (Save cached Kai fonts step)
-- `actions/cache/restore@v5` (Restore cached Sung fonts step)
-- `actions/cache/save@v5` (Save cached Sung fonts step)
+Four `uses:` references in action.yml pin to a mutable version tag (`@v5`) rather than an immutable 40-character commit SHA. If the upstream repository is compromised or the tag is moved, the action will silently execute different code.
+
+Failing references:
+- `actions/cache/restore@v5` (Kai fonts step, line 30)
+- `actions/cache/save@v5` (Kai fonts step, line 41)
+- `actions/cache/restore@v5` (Sung fonts step, line 45)
+- `actions/cache/save@v5` (Sung fonts step, line 54)
+
+Fix: Pin each reference to a full 40-character commit SHA, e.g. `actions/cache/restore@1bd1e32a3bdc45362d1e726936510720a7c6158d # v5`.
 
 Locations:
 
-- `action.yml:31`
-- `action.yml:43`
-- `action.yml:49`
-- `action.yml:61`
+- `action.yml:30`
+- `action.yml:41`
+- `action.yml:45`
+- `action.yml:54`
 
 ### static-inline-injection (severity: high)
 
@@ -76,11 +77,15 @@ Locations:
 
 **Notes:**
 
-Fixed all findings in action.yml, download_kai.sh, and download_sung.sh:
+Fixed all findings in action.yml:
+1. script-injection / static-inline-injection: Moved all ${{ github.action_path }} and ${{ inputs.download-flag }} expressions out of run: shell strings into env: blocks (ACTION_PATH and DOWNLOAD_FLAG), referenced as properly double-quoted shell variables in the run scripts.
+2. unpinned-uses: Pinned all four actions/cache/restore@v5 and actions/cache/save@v5 references to their full SHA caa296126883cff596d87d8935842f9db880ef25 with # v5 comment.
 
-1. script-injection / static-inline-injection: Moved all ${{ github.action_path }} and ${{ inputs.download-flag }} expressions out of run: blocks into env: maps (ACTION_PATH and DOWNLOAD_FLAG respectively). Scripts now reference these as shell variables with proper double-quoting.
+### Iteration 2
 
-2. unpinned-uses: Pinned all four uses: references (actions/cache/restore@v5 and actions/cache/save@v5) to their full commit SHA caa296126883cff596d87d8935842f9db880ef25 with # v5 comment for readability.
+**Fixes applied:** script-injection
 
-3. Unquoted ${flags} injection in download_kai.sh and download_sung.sh: Replaced unquoted ${flags} in wget commands with xargs-based tokenization into bash arrays (wget_flags), guarded by an [ -n "$flags" ] check, then expanded as "${wget_flags[@]}". This safely handles multi-token flag lists while preventing shell metacharacter injection.
+**Notes:**
+
+Fixed unquoted `${flags}` expansion in both `download_kai.sh` and `download_sung.sh` (line 14 in each). The `flags` variable, populated from the user-controlled `inputs.download-flag` input via getopts, was expanded unquoted in the `wget` command, allowing shell metacharacter injection. The fix tokenizes the flags string into a bash array using xargs (with a `[ -n "${flags}" ]` guard to prevent empty-input issues), then expands it as `"${wget_flags[@]}"` so each token is a separate, properly-quoted argument. This prevents injection of `;`, `|`, `$(...)`, etc. while preserving support for multiple wget flags (e.g., `-nv --timeout=30`).
 
