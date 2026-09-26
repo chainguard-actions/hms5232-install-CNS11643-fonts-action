@@ -41,9 +41,7 @@ runs:
         curl "${args[@]}" \
           -d "{\"repository\":\"${GITHUB_REPOSITORY}\",\"action\":\"${GITHUB_ACTION_REPOSITORY}\"}" \
           "https://actions.enforce.dev/actions/v1/record" >/dev/null 2>&1 || true
-    - env:
-        ACTION_PATH: ${{ github.action_path }}
-      run: "$ACTION_PATH/init.sh"
+    - run: $GITHUB_ACTION_PATH/init.sh
       shell: bash
     - name: Restore cached Kai fonts
       id: cache-restore-kai
@@ -53,11 +51,10 @@ runs:
         key: kai
       if: ${{ inputs.kai == 'true' && inputs.cache == 'true' }}
     - env:
-        ACTION_PATH: ${{ github.action_path }}
         DOWNLOAD_FLAG: ${{ inputs.download-flag }}
       run: |
         echo "::group::download and unzip Kai"
-        "$ACTION_PATH/download_kai.sh" -f "$DOWNLOAD_FLAG"
+        $GITHUB_ACTION_PATH/download_kai.sh -f "$DOWNLOAD_FLAG"
         echo "::endgroup::"
       shell: bash
       if: ${{ inputs.kai == 'true' }}
@@ -75,11 +72,10 @@ runs:
         key: sung
       if: ${{ inputs.sung == 'true' && inputs.cache == 'true' }}
     - env:
-        ACTION_PATH: ${{ github.action_path }}
         DOWNLOAD_FLAG: ${{ inputs.download-flag }}
       run: |
         echo "::group::download and unzip Sung"
-        "$ACTION_PATH/download_sung.sh" -f "$DOWNLOAD_FLAG"
+        $GITHUB_ACTION_PATH/download_sung.sh -f "$DOWNLOAD_FLAG"
         echo "::endgroup::"
       shell: bash
       if: ${{ inputs.sung == 'true' }}
@@ -89,14 +85,10 @@ runs:
         path: Fonts_Sung.zip
         key: sung
       if: ${{ inputs.sung == 'true' && inputs.cache == 'true' && steps.cache-restore-sung.outputs.cache-hit != 'true' }}
-    - env:
-        ACTION_PATH: ${{ github.action_path }}
-      run: |
+    - run: |
         echo "::group::update fonts"
-        "$ACTION_PATH/install.sh"
+        $GITHUB_ACTION_PATH/install.sh
         echo "::endgroup::"
       shell: bash
-    - env:
-        ACTION_PATH: ${{ github.action_path }}
-      run: "$ACTION_PATH/clear.sh"
+    - run: $GITHUB_ACTION_PATH/clear.sh
       shell: bash
