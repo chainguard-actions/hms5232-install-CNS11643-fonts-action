@@ -9,10 +9,16 @@ while getopts 'f:' flag; do
   esac
 done
 
+flags_array=()
+if [ -n "$flags" ]; then
+  while IFS= read -r -d '' t; do flags_array+=("$t"); done \
+    < <(printf '%s' "$flags" | xargs printf '%s\0')
+fi
+
 if [ -f "Fonts_Sung.zip" ]; then
   echo "Use exists Fonts_Sung.zip"
 else
-  wget -O Fonts_Sung.zip "${flags}" https://www.cns11643.gov.tw/opendata/Fonts_Sung.zip
+  wget -O Fonts_Sung.zip "${flags_array[@]}" https://www.cns11643.gov.tw/opendata/Fonts_Sung.zip
 fi
 
 # let's hash it~
